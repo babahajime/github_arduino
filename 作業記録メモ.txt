@@ -213,3 +213,48 @@ IoTプラットホーム：Blynk◎,ThingSpeak,,,,
 通知方法：Blynkアプリ◎,IFTTT経由でLINE,Twitter,E-Mail,,,,
 
 
+■
+確認すると､FLASH boot モード時に
+ ets Jan  8 2013,rst cause:5, boot mode:(3,6)
+
+ets_main.c
+と表示されるようになっていました｡
+どうやら何らかの原因によりSPIフラッシュに書かれたブートローダーが壊れたようです｡
+http://ghz2000.com/wordpress/?p=888
+
+esptool.py -p COM5 -b 9600 write_flash 0x00 esp8266bin\eagle.flash.bin
+esptool.py -p COM5 -b 9600 write_flash 0x10000 esp8266bin\eagle.irom0text.bin
+esptool.py -p COM5 -b 9600 write_flash 0x7e000 esp8266bin\blank.bin
+esptool.py -p COM5 -b 9600 write_flash 0x3fe000 esp8266bin\blank.bin
+esptool.py -p COM5 -b 9600 write_flash 0x3fc000 esp8266bin\esp_init_data_default.bin
+
+↑これはなぜかうまく動かなかったので、下を試した
+
+https://qiita.com/masato/items/3f386dbc600c1cd840f4
+https://github.com/techiesms/ESP8266-Firmware-Upgrading-Files/tree/master/Flasher%20For%20ESP8266
+esptool.py -p COM5 -b 9600 write_flash 0x000000 esp8266bin\AI-v0.9.5.0_AT_Firmware.bin
+
+確認、9600bpsにしてATとAT+GMRコマンドを入力。
+at
+
+OK
+at+GMR
+00200.9.5(b1)
+compiled @ Dec 25 2014 21:40:28
+AI-THINKER Dec 25 2014
+
+OK
+
+→書き込みはうまくいったが、まだEPS.deepSleep()時に ets_main.cエラーが出た。
+
+http://neo-sahara.com/wp/2015/12/17/esp8266%E3%83%A2%E3%82%B8%E3%83%A5%E3%83%BC%E3%83%ABesp-wroom-02%E3%82%92%E8%A9%A6%E3%81%99-%E3%81%9D%E3%81%AE%EF%BC%91%EF%BC%91-%E8%B5%B7%E5%8B%95%E6%99%82%E3%81%AE%E3%83%A1%E3%83%83%E3%82%BB/
+
+→
+https://qiita.com/exabugs/items/9edf9e2ba8f69800e4c5
+// IO16(19番ピン)を RST(リセット,17番ピン) に繋いでおく必要がある。
+// → 指定時間経過後にリセットが実行され、再起動がかかる。
+
+回路を修正したら正常に動いた！
+
+
+

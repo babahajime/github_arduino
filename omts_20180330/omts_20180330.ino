@@ -1,6 +1,6 @@
 // omts - OMuTsu Sensor
 
-#define USE_WIFI_MODE 1  // or 0
+#define USE_WIFI_MODE // or 0
 
 #ifdef USE_WIFI_MODE
 #include <ESP8266WiFi.h>
@@ -13,30 +13,36 @@ BlynkTimer timer;
 #include "config.h"
 #endif
 
-#define PIN_LED 16                          // IO 16(19番ピン)にLEDを接続する 
-#define PIN_BZR 5                           // IO  5(16番ピン)にブザーを接続する 
+#define PIN_LED 4                           // IO 4(12番ピン)にLEDを接続する 
+#define PIN_BZR 5                           // IO 5(16番ピン)にブザーを接続する 
 #define PIN_TOUT 18                         // 18番ピンがTOUT（センサ）を接続する 
-#define SLEEP_P 20*60*1000000               // スリープ時間 20分(uint32_t) 
-#define SLEEP_N 36                          // 最長スリープ時間 SLEEP_P×SLEEP_N 
-#define DEADZONE 0.3                        // 前回値との相違に対する閾値(℃) 
+// IO16(19番ピン)を RST(リセット,17番ピン) に繋いでおく必要がある。
+// → 指定時間経過後にリセットが実行され、再起動がかかる。
+
+#define BPS 74880                           // or 115200
+#define SLEEP_P 5*1000000                   // スリープ時間 5秒(uint32_t) 
+#define SLEEP_N 6                           // 最長スリープ時間 SLEEP_P×SLEEP_N 
+#define DEADZONE 10                         // 前回値との相違に対する閾値(生値）
 
 static char* status[] = {"乾いています", "ちょうど良い", "濡れています", "不明"};
-//static char* status[] = {"dry", "humid", "wet", "unknown"};
 static int soil_moisture = 0; // 初期値0
 static int t1 = 300; // 初期値threshold #1
 static int t2 = 700; // 初期値threshold #2
-static int mem;                             // RTCメモリからの数値データ保存用 
+static int mem = 0;                         // RTCメモリからの数値データ保存用 
 extern int WAKE_COUNT; 
 unsigned long start_ms;                     // 初期化開始時のタイマー値を保存 
 
 void sleep(); 
+void flash();
 void beep();
+void beep3();
 
 
 // http://docs.blynk.cc/#blynk-firmware-blynktimer
 void myTimerEvent() {
   // １回だと分からんから、複数回読むように要改良
-  soil_moisture = analogRead(0); // AO==TOUTから読む
+//  soil_moisture = analogRead(0); // AO==TOUTから読む
+  Serial.print("soil_moisture=");
   Serial.println(soil_moisture);
 
 #ifdef USE_WIFI_MODE
@@ -57,18 +63,19 @@ void myTimerEvent() {
     Blynk.virtualWrite(V1, status[2]);
 #endif
     Serial.println(status[2]);
-    // red LED lighting
-    digitalWrite(12, HIGH);
+    // LED lighting
+    digitalWrite(PIN_LED, HIGH);
     delay(500);
-    digitalWrite(12, LOW);
+    digitalWrite(PIN_LED, LOW);
     // and beep
-    beep();
+    beep3();
   } else {
 #ifdef USE_WIFI_MODE
     Blynk.virtualWrite(V1, status[3]);
 #endif
     Serial.println(status[3]);
   }
+  delay(1000);
 }
 
 #ifdef USE_WIFI_MODE
@@ -90,20 +97,32 @@ BLYNK_WRITE(V3) {
 // センサ値を読取、Wifi接続送信、
 void setup(){                             // 起動時に一度だけ実行する関数 
   int waiting=0;                          // アクセスポイント接続待ち用 
+  pinMode(PIN_LED,OUTPUT);
+  pinMode(PIN_BZR,OUTPUT);
+  Serial.begin(BPS);
+  Serial.println("Booting");
+  flash();
+//  beep();
   
   // １回だと分からんから、複数回読むように要改良
   soil_moisture = analogRead(0);          // AO==TOUTから読む
+  Serial.print("soil_moisture=");
   Serial.println(soil_moisture);
 
   mem = fabs(readRtcInt()-soil_moisture); // RTCメモリの温度値と比較する 
+  Serial.print("mem="); Serial.println(mem);
   if( WAKE_COUNT % SLEEP_N &&             // SLEEP_Nが0以外 かつ 
       mem <= DEADZONE )                   // 閾値以下 のときに 
     sleep();                              // スリープを実行
 
 #ifdef USE_WIFI_MODE
+  Serial.println("Wifi Booting...");
   WiFi.mode(WIFI_STA);                    // 無線LANをSTAモードに設定 
   WiFi.begin(ssid,password);              // 無線LANアクセスポイントへ接続 
-  while(WiFi.status() != WL_CONNECTED){   // 接続に成功するまで待つ 
+  Serial.println("Wifi.begin()"); //debug
+//  while(WiFi.status() != WL_CONNECTED){   // 接続に成功するまで待つ
+  while (WiFi.waitForConnectResult() != WL_CONNECTED) {
+    Serial.println("Connection Failed! Rebooting...");
     delay(100);                           // 待ち時間処理 
     waiting++;                            // 待ち時間カウンタを1加算する 
     if(waiting%10==0)Serial.print('.');   // 進捗表示 
@@ -115,6 +134,9 @@ void setup(){                             // 起動時に一度だけ実行す�
   Blynk.config(blynk_auth); // or Blynk.config(auth,server,port);
   bool result = Blynk.connect();
   Wire.begin(); // ???
+  // Blynk Setup a function to be called every second
+//  timer.setInterval(5*1000L, myTimerEvent); // every 5 seconds
+  myTimerEvent(); // every 5 seconds
 #endif
 }
 
@@ -125,20 +147,35 @@ void loop() {
   sleep();
 }
 
-void sleep(){ 
+void flash() {
+  digitalWrite(PIN_LED,HIGH);             // LEDの点灯 
+  delay(100);
   digitalWrite(PIN_LED,LOW);              // LEDの消灯 
+}
+
+void sleep(){ 
+  Serial.print("Sleeping...");
+  digitalWrite(PIN_LED,LOW);              // LEDの消灯 
+  digitalWrite(PIN_BZR,LOW);              // BZRの消灯
+//WAKE_RF_DEFAULT = 0, // RF_CAL or not after deep-sleep wake up, depends on init data byte 108.
+//WAKE_RFCAL = 1,      // RF_CAL after deep-sleep wake up, there will be large current.
+//WAKE_NO_RFCAL = 2,   // no RF_CAL after deep-sleep wake up, there will only be small current.
+//WAKE_RF_DISABLED = 4 // disable RF after deep-sleep wake up, just like modem sleep, there will be the smallest current.
   ESP.deepSleep(SLEEP_P,WAKE_RF_DEFAULT); // スリープモードへ移行する 
   while(1){                               // 繰り返し処理 
     delay(100);                           // 100msの待ち時間処理 
+    Serial.print(".");
   }                                       // 繰り返し中にスリープへ移行 
 }
 
 void beep() {
-  for (int i=0;i<3;i++) {
-    analogWrite(PIN_BZR, 500);
-    analogWriteFreq(440); // ラの音
-    delay(500);
-    analogWrite(PIN_BZR, 0);
-    delay(500);
-  }
+  analogWrite(PIN_BZR, 500);
+  analogWriteFreq(440); // ラの音
+  delay(500);
+  analogWrite(PIN_BZR, 0);
+  delay(500);
+}
+
+void beep3() {
+  for (int i=0;i<3;i++) beep();
 }
