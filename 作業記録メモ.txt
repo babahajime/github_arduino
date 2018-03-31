@@ -1,0 +1,215 @@
+﻿ESP-WROOM-02設定メモ
+自分用の覚え書き
+
+■2018/3/17（土）、初めての設定
+
+・ハンダ付け
+ハンダ付けのセットを買ってきた。ESP-WROOM-02はハンダ付け必要。
+
+・Arduino IDEインストール・初期設定
+特に無し
+
+・WROOM-02とパソコンをUSB接続
+最初、充電用ケーブルを用いてしまい、パソコン側で認識せずに手間取った。
+通信用ケーブルで接続したら、パソコン側で自動でドライバインストールし、
+デバイスマネージャから見えるようになった。COM5になった。
+シリアルコンソールで確認したらこんな感じ。
+
+====================================================
+AT
+OK
+
+AT+GMR
+AT version:1.3.0.0(Oct 28 2016 11:29:39)
+SDK version:2.0.0(6ccde98)
+compile time:Mar 31 2017 14:50:03
+OK
+
+AT+CIFSR
++CIFSR:APIP,"192.168.4.1"
++CIFSR:APMAC,"5e:cf:7f:be:a2:09"
+OK
+====================================================
+
+・付属マニュアル通りのLチカ
+書いてあるそのまま。
+Arduino IDEからLチカプログラム書いてupload。
+最初はUSB接続つなぎ忘れ、次にPGMとRSTボタン間違え。
+抵抗を10kΩにしたらLEDが暗い、、、10Ωに変えたら十分な明るさ。
+
+・付属マニュアルのWifi接続
+書いてあるそのまま。iPhoneから 192.168.4.1 に接続してつながった。
+
+
+■2018/3/18（日）
+
+・土壌湿度センサー（秋月のSEN0114）を試す
+
+ESP-WROOM-02で「アナログ入力」をするには3.3Vの電圧を「抵抗分圧回路」で
+1V以下に分圧してからTOUT(A0)ピンと接続します。
+https://www.petitmonte.com/robot/esp_wroom_02_analogread.html
+
+が正しいようだが、今は抵抗は10Ωか10kΩしかないから、
+3V3 == 10Ω == SEN0114ホット側とはさんでみる。
+→とりあえずこれでそれらしい出力が出た。
+乾燥していると3とか4を出力、濡れティッシュだと1024、
+実際の土に挿してみたら300-500前後の値を出した。
+
+===========================================================
+int soil_moisture;
+
+void setup() {
+  // put your setup code here, to run once:
+  Serial.begin(115200);
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+  soil_moisture = analogRead(0);
+  Serial.println(soil_moisture);
+  delay(2000);
+}
+===========================================================
+
+・参考：ESP-WROOM-02でアナログ入力をするには
+http://deviceplus.jp/hobby/entry034/
+
+Arduino UNOでは、アナログ入力ピンがA0～A4と用意されていましたが、
+ESP-WROOM-02にはA0～A4のようなアナログ専用の入力ピンがついていません。そ
+して、デジタルピンも1、3～4、6～11がありません。これは、wifi通信など、
+ESP-WROOM-02の標準で用意されている機能を動かすために、ピンが使われている
+ため使うことができません。
+
+ESP-WROOM-02にはanalogRead関数が用意されていないらしく、そのため利用する
+ことができないようでした。では、どうすればアナログ入力をすることができる
+でしょうか？さらに調べてみると、ESP-WROOM-02でアナログ入力を行うには、
+TOUTピンで「system_adc_read()」という関数を使って、アナログ値を取得する
+ことができるようです。
+
+==>おかしいな？とりあえずpending
+
+
+・Blynk のテスト
+
+まずiPhone側でアプリインストール。
+立上げて、新規アカウント作成、baba.hajime@gmail.com / blynk5963 
+新規プロジェクト作成、soil_moisture という名前。
+Auth Token : eba203f264104d43a5b4916c3f5184ef
+
+次にPC側で、Arduino IDEに Blynkライブラリーをインストール。
+ZIP展開してlibraries と tools をコピー。
+https://www.mgo-tec.com/blog-entry-esp32-blynk-01.html/3
+
+
+スケッチを作成。他の例を参考に soil_moisture_blynk.c で作成。
+http://shimanuki-farm.net/archives/955/
+https://www.mgo-tec.com/blog-entry-esp32-blynk-01.html/3
+
+→これで、ESP->iphone側でセンサ値を表示、
+iphone->ESP側に設定変更の値を送れた。
+これはなかなかすごいな。
+
+
+・IFTTT試行
+http://oita.oika.me/2017/09/16/ifttt-push-to-phone/
+イフトは何回かUIや用語に大きな変更があって、調べながらやろうとしたらけっこう苦戦した。
+
+
+Googleアカウントでログイン。
+This に Webhookを選び、ESP-WROOM-02_event で、
+That に LINE メッセージを送る、を選ぶ。
+Your key is: bBbR_j_WXc27Ufaut-qKik
+
+https://maker.ifttt.com/trigger/ESP-WROOM-02_event/with/key/○○○○
+に、POSTでJSONを送る。
+JSON形式は、{"value1":"aaa","value2":"bbb","value3":"ccc"}
+
+テストは、Chrome拡張の Advanced REST clientを入れてみる
+ブラウザから手軽にHTTPリクエストを送信するChrome拡張『Advanced REST client』
+http://hwada.hatenablog.com/entry/2013/10/28/123517
+
+→URLに content-type: application/json でJSONをPOSTしたら、
+LINEにメッセージ届いた
+
+あとは、以下を参考にしてスケッチを作成すればokそう。
+ESP-WROOM-02+土壌湿度センサーとIFTTTでセンサーの値を定期tweetする
+https://qiita.com/jun1_0803/items/774bfbf2f2aa0802bfaf
+
+-----------
+センサーの値によってtweetを変えたかったので、event名をif文で分岐した
+また、ESPーWROOM-02の機能である、deep sleepを使うことを考え、loopには何も書かず、setup内でのみGETするようにした
+setupの最後に「ESP.deepSleep(3600 * 1000 * 1000);」を加え、開発ボードのIO16ピンとRESETピンをつなげる
+こうすることで、ESP-WROOM-02の省電力モードであるdeep sleep機能が使えるようになる
+-----------
+
+ESP.deepsleep は以下も参考
+http://shimanuki-farm.net/archives/1099/
+
+
+■2018/3/21（水）
+電池で動かすように試す。コイル一体型昇圧DC/DCコンバータ
+AE-XCL101C501BR-G経由で5V入力するようにした。動いた。
+
+IFTTTで、LINE notifyで繁にも送るようにした。LINEグループを作れば良いみたい。
+
+これで、POSTするようにしてやればokか。
+
+→とりあえず動くようにはなったが、Blynk から IFTTTしてくれない
+
+
+・IoTサービスの ThingSpeak登録
+
+参考
+http://neo-sahara.com/wp/2016/04/01/esp8266%E3%83%A2%E3%82%B8%E3%83%A5%E3%83%BC%E3%83%ABesp-wroom-02%E3%82%92%E8%A9%A6%E3%81%99-%E3%81%9D%E3%81%AE%EF%BC%93%EF%BC%92-arduino-ide-thingspeak%E3%82%92%E4%BD%BF%E3%81%A3%E3%81%A6/
+
+アカウント作成
+baba.hajime@gmail.com
+babahajime
+ThingSpeak5963
+
+チャンネル作った
+ESP-WROOM-02_soil-moisture
+Channel ID: 455143
+Author: babahajime
+Access: Private
+
+キー確認
+Write API Key  Key  I52YPHQYVFC5NBXD
+
+
+■2018/3/24（土）
+・OTA設定
+Python27を使うのでインストールしとく。
+https://www.python.jp/install/windows/install_py2.7.html
+PATHも手動で通しとく。初回起動時はWindowsセキュリティ警告も出る。
+
+BasicOTAの中に処理を追加するのは見通しが悪いので、
+BasicOTAにAPIを追加します。
+追加するのは、OTA_setup()、OTA_loop() の二つです。
+http://makers-with-myson.blog.so-net.ne.jp/2017-01-11
+
+ここで、一度 Arduino IDE を閉じて再起動します。（←ここ重要）
+すると、ツール/シリアルポートに、ネットワーク越しのESP8266が見えます
+→これで書き込み（ESP8266側は書き込み待ち受けボタン押しは不要←ここ重要）
+
+電池が切れた。3/21から３日しか保たなかった、、、
+
+Arduinoの「error: variable or field 'foo' declared void 」は
+#includeをまとめて書くと直るかも
+http://novogrammer.hatenablog.com/entry/2015/01/30/221434
+→直った。これは分からんハマリポイントやな。
+
+
+Blynkアプリを止めてるとデータが送られない、という情報があり、
+https://qiita.com/Kaz_Macintosh/items/9b0fcfdd5476bd7e25cf
+→
+実際にもそうなったが、Blynkドキュメント良く読むと、
+センサ端末側からBlynkサーバにPUSHする必要があると分かった。
+サンプルスケッチのPushData
+これだとThingSpeakは不要にできるかもしれない。
+
+
+IoTプラットホーム：Blynk◎,ThingSpeak,,,,
+通知方法：Blynkアプリ◎,IFTTT経由でLINE,Twitter,E-Mail,,,,
+
+
