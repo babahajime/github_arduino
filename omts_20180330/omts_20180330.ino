@@ -4,6 +4,11 @@
 
 #ifdef USE_WIFI_MODE
 #include <ESP8266WiFi.h>
+// https://github.com/tzapu/WiFiManager
+#include <DNSServer.h>
+#include <ESP8266WebServer.h>
+#include <WiFiManager.h>
+
 // Blynk用
 #define BLYNK_PRINT Serial    // Comment this out to disable prints and save space
 #include <BlynkSimpleEsp8266.h>
@@ -119,11 +124,12 @@ void setup(){                             // 起動時に一度だけ実行す�
 
 #ifdef USE_WIFI_MODE
   Serial.println("Wifi Booting...");
-  WiFi.mode(WIFI_STA);                    // 無線LANをSTAモードに設定 
-  WiFi.begin(ssid,password);              // 無線LANアクセスポイントへ接続 
-  Serial.println("Wifi.begin()"); //debug
-//  while(WiFi.status() != WL_CONNECTED){   // 接続に成功するまで待つ
-  while (WiFi.waitForConnectResult() != WL_CONNECTED) {
+  WiFiManager wifiManager;
+  wifiManager.autoConnect("ESP8266_WiFiAP");
+//  WiFi.mode(WIFI_STA);                    // 無線LANをSTAモードに設定 
+//  WiFi.begin(ssid,password);              // 無線LANアクセスポイントへ接続 
+//  while (WiFi.waitForConnectResult() != WL_CONNECTED) {
+  while(WiFi.status() != WL_CONNECTED){   // 接続に成功するまで待つ
     Serial.println("Connection Failed! Rebooting...");
     delay(100);                           // 待ち時間処理 
     waiting++;                            // 待ち時間カウンタを1加算する 
