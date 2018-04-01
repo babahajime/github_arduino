@@ -75,6 +75,7 @@ void myTimerEvent() {
     sprintf(message, "OMTSセンサー通知: %s", status[2]);
 //    Blynk.tweet(message);   // 自分がつぶやく
     Blynk.email(email_addr, "OMTSセンサー通知", message);  // メール送信
+    Blynk.email(email_addr2, "OMTSセンサー通知", message);  // メール送信
     Blynk.notify(message);    // Blynkアプリの通知機能
 //    ifttt_webhook(message); // Blynkマニュアルのwebhookの項目
 #endif
