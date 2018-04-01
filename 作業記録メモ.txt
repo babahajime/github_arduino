@@ -213,7 +213,7 @@ IoTプラットホーム：Blynk◎,ThingSpeak,,,,
 通知方法：Blynkアプリ◎,IFTTT経由でLINE,Twitter,E-Mail,,,,
 
 
-■
+■2018/3/31（土）
 確認すると､FLASH boot モード時に
  ets Jan  8 2013,rst cause:5, boot mode:(3,6)
 
@@ -255,6 +255,16 @@ https://qiita.com/exabugs/items/9edf9e2ba8f69800e4c5
 // → 指定時間経過後にリセットが実行され、再起動がかかる。
 
 回路を修正したら正常に動いた！
+単３電池３本で動作試行中。
+
+
+■2018/4/1（日）
+
+Blynk 経由でのnotificationを試す
+・email -> ok
+・notify -> アプリ側で入れる必要はあるが（2000$に納める）、使える
+・tweet -> 自分がつぶやくことになる。自分に送られてくるのでないのか、、pending
+・webhook -> IFTTTに送れるはずだが、まだ未完
 
 
 
