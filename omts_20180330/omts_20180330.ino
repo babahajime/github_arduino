@@ -7,24 +7,26 @@
 // Blynk用
 #define BLYNK_PRINT Serial    // Comment this out to disable prints and save space
 #include <BlynkSimpleEsp8266.h>
-#include <Wire.h>
+//#include <Wire.h>
 BlynkTimer timer;
 // 個別設定（SSID,パスワード,AuthToken等）
 #include "config.h"
 #endif
 
-#define PIN_LED 4                           // IO 4(12番ピン)にLEDを接続する 
-#define PIN_BZR 5                           // IO 5(16番ピン)にブザーを接続する 
+#define PIN_LED 4                           // GPIO 4(12番ピン)にLEDを接続する 
+#define PIN_BZR 5                           // GPIO 5(16番ピン)にブザーを接続する 
 #define PIN_TOUT 18                         // 18番ピンがTOUT（センサ）を接続する 
+// ESP.deepSleepするためには、
 // IO16(19番ピン)を RST(リセット,17番ピン) に繋いでおく必要がある。
 // → 指定時間経過後にリセットが実行され、再起動がかかる。
 
-#define BPS 74880                           // or 115200
+#define SPEED 74880                         // or 115200
 #define SLEEP_P 5*1000000                   // スリープ時間 5秒(uint32_t) 
 #define SLEEP_N 6                           // 最長スリープ時間 SLEEP_P×SLEEP_N 
 #define DEADZONE 10                         // 前回値との相違に対する閾値(生値）
 
 static char* status[] = {"乾いています", "ちょうど良い", "濡れています", "不明"};
+static char message[128];
 static int soil_moisture = 0; // 初期値0
 static int t1 = 300; // 初期値threshold #1
 static int t2 = 700; // 初期値threshold #2
@@ -33,9 +35,10 @@ extern int WAKE_COUNT;
 unsigned long start_ms;                     // 初期化開始時のタイマー値を保存 
 
 void sleep(); 
-void flash();
+void led_flash();
 void beep();
 void beep3();
+void ifttt_webhook();
 
 
 // http://docs.blynk.cc/#blynk-firmware-blynktimer
@@ -44,38 +47,39 @@ void myTimerEvent() {
 //  soil_moisture = analogRead(0); // AO==TOUTから読む
   Serial.print("soil_moisture=");
   Serial.println(soil_moisture);
-
 #ifdef USE_WIFI_MODE
   Blynk.virtualWrite(V0, soil_moisture);
 #endif
+
   if (soil_moisture > 0 && soil_moisture <= t1) {
+    Serial.println(status[0]);
 #ifdef USE_WIFI_MODE
     Blynk.virtualWrite(V1, status[0]);
 #endif
-    Serial.println(status[0]);
   } else if (soil_moisture > t1 && soil_moisture <= t2) {
+    Serial.println(status[1]);
 #ifdef USE_WIFI_MODE
     Blynk.virtualWrite(V1, status[1]);
 #endif
-    Serial.println(status[1]);
-  } else if (soil_moisture > t2 && soil_moisture <= 1024) {
+  } else if (soil_moisture > t2 && soil_moisture <= 1024) {  // 濡れています
+    Serial.println(message);
+    led_flash(500); // LED lighting
+    beep3(); // and beep
 #ifdef USE_WIFI_MODE
     Blynk.virtualWrite(V1, status[2]);
+    sprintf(message, "OMTSセンサー通知: %s", status[2]);
+//    Blynk.tweet(message);   // 自分がつぶやく
+    Blynk.email(email_addr, "OMTSセンサー通知", message);  // メール送信
+    Blynk.notify(message);    // Blynkアプリの通知機能
+//    ifttt_webhook(message); // Blynkマニュアルのwebhookの項目
 #endif
-    Serial.println(status[2]);
-    // LED lighting
-    digitalWrite(PIN_LED, HIGH);
-    delay(500);
-    digitalWrite(PIN_LED, LOW);
-    // and beep
-    beep3();
   } else {
+    Serial.println(status[3]);
 #ifdef USE_WIFI_MODE
     Blynk.virtualWrite(V1, status[3]);
 #endif
-    Serial.println(status[3]);
   }
-  delay(1000);
+  delay(200);                             // 送信待ち時間 
 }
 
 #ifdef USE_WIFI_MODE
@@ -99,16 +103,14 @@ void setup(){                             // 起動時に一度だけ実行す�
   int waiting=0;                          // アクセスポイント接続待ち用 
   pinMode(PIN_LED,OUTPUT);
   pinMode(PIN_BZR,OUTPUT);
-  Serial.begin(BPS);
+  Serial.begin(SPEED);
   Serial.println("Booting");
-  flash();
-//  beep();
+  led_flash(200); // msec
   
   // １回だと分からんから、複数回読むように要改良
   soil_moisture = analogRead(0);          // AO==TOUTから読む
   Serial.print("soil_moisture=");
   Serial.println(soil_moisture);
-
   mem = fabs(readRtcInt()-soil_moisture); // RTCメモリの温度値と比較する 
   Serial.print("mem="); Serial.println(mem);
   if( WAKE_COUNT % SLEEP_N &&             // SLEEP_Nが0以外 かつ 
@@ -125,18 +127,18 @@ void setup(){                             // 起動時に一度だけ実行す�
     Serial.println("Connection Failed! Rebooting...");
     delay(100);                           // 待ち時間処理 
     waiting++;                            // 待ち時間カウンタを1加算する 
-    if(waiting%10==0)Serial.print('.');   // 進捗表示 
+    if(waiting%10==0) Serial.print('.');  // 進捗表示 
     if(waiting > 300) sleep();            // 300回(30秒)を過ぎたらスリープ 
   } 
   Serial.println(WiFi.localIP());         // 本機のIPアドレスをシリアル出力   
 
-  //Blynk.begin(blynk_auth, ssid, password);
-  Blynk.config(blynk_auth); // or Blynk.config(auth,server,port);
-  bool result = Blynk.connect();
-  Wire.begin(); // ???
+  Blynk.config(blynk_auth);               // or Blynk.config(auth,server,port);
+  bool result = Blynk.connect();          // 接続
+//  Wire.begin(); // Wireライブラリを初期化し、I2Cバスにマスタとして接続
+
   // Blynk Setup a function to be called every second
-//  timer.setInterval(5*1000L, myTimerEvent); // every 5 seconds
-  myTimerEvent(); // every 5 seconds
+  //  timer.setInterval(5*1000L, myTimerEvent); // これを使わなくてok
+  myTimerEvent();                         // every 5 seconds
 #endif
 }
 
@@ -147,9 +149,9 @@ void loop() {
   sleep();
 }
 
-void flash() {
+void led_flash(int msec) {
   digitalWrite(PIN_LED,HIGH);             // LEDの点灯 
-  delay(100);
+  delay(msec);
   digitalWrite(PIN_LED,LOW);              // LEDの消灯 
 }
 
@@ -179,3 +181,36 @@ void beep() {
 void beep3() {
   for (int i=0;i<3;i++) beep();
 }
+
+/*
+  作りかけ。まだ動かない。
+
+// Blynkマニュアルのwebhookの項目（thinkgspeakの例）を参考に
+// IFTTT  https://maker.ifttt.com/trigger/{event}/with/key/{key}";
+void ifttt_webhook(char *message) {
+  WiFiSecureClient client;
+  char url[256];
+  char json[256];
+  sprintf(url, "maker.ifttt.com/trigger/%s/with/%s", ifttt_event, ifttt_key);
+  sprintf(json, "{ value1: %s, value2: %s, value3: %s }", v1, v2, v3);
+
+  if (client.connect(url, 443)) {
+    client.print("POST /update HTTP/1.1\n");
+    client.print("Content-Type: application/json\n");
+    client.print(json);
+  }
+//  WiFiClient client;
+//  if (client.connect("api.thingspeak.com", 80)) {
+//    client.print("POST /update HTTP/1.1\n");
+//    client.print("Host: api.thingspeak.com\n");
+//    client.print("Connection: close\n");
+//    client.print("X-THINGSPEAKAPIKEY: " + apiKeyThingspeak1 + "\n");
+//    client.print("Content-Type: application/x-www-form-urlencoded\n");
+//    client.print("Content-Length: ");
+//    client.print(postStr.length());
+//    client.print("\n\n");
+//    client.print(postStr);
+//  }
+}
+*/
+
