@@ -74,8 +74,8 @@ void myTimerEvent() {
     Blynk.virtualWrite(V1, status[2]);
     sprintf(message, "OMTSセンサー通知: %s", status[2]);
 //    Blynk.tweet(message);   // 自分がつぶやく
-    Blynk.email(email_addr, "OMTSセンサー通知", message);  // メール送信
-    Blynk.email(email_addr2, "OMTSセンサー通知", message);  // メール送信
+//    Blynk.email(email_addr, "OMTSセンサー通知", message);  // メール送信
+//    Blynk.email(email_addr2, "OMTSセンサー通知", message);  // メール送信
     Blynk.notify(message);    // Blynkアプリの通知機能
 //    ifttt_webhook(message); // Blynkマニュアルのwebhookの項目
 #endif
@@ -195,7 +195,7 @@ void beep3() {
 // Blynkマニュアルのwebhookの項目（thinkgspeakの例）を参考に
 // IFTTT  https://maker.ifttt.com/trigger/{event}/with/key/{key}";
 void ifttt_webhook(char *message) {
-  WiFiSecureClient client;
+  WiFiClientSecure client;
   char url[256];
   char json[256];
   sprintf(url, "maker.ifttt.com/trigger/%s/with/%s", ifttt_event, ifttt_key);
