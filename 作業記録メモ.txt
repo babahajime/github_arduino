@@ -278,3 +278,19 @@ Blynk 経由でのnotificationを試す
 もし職場WiFiが使えるならそれも登録できるはず。
 
 
+
+■2018/4/26（木）
+gmnk - ゴムの木センサーとして、ThingSpeak に投げるものを作った。
+
+ESP8266 -> ThingSpeak (react -> thingHTTP) -> IFTTT (Webhook -> LINE)
+という流れの仕組み。
+
+https://maker.ifttt.com/trigger/ESP8266-gmnk/with/key/○○○○
+Your key is: bBbR_j_WXc27Ufaut-qKik
+
+（１）ThingHTTP でのapplication/json形式は、
+{"value1":"乾いています","value2":%%field1%%}
+
+（２）IFTTTでのアプレットも作成。前のと同様。
+
+
